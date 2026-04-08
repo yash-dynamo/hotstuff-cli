@@ -1,12 +1,13 @@
 # Hotstuff Market CLI
 
-Simple CLI on top of your local MCP server (`@yash-dynamo/mcp11`) for public market data.
+Simple SDK-powered CLI for Hotstuff market data and order execution.
 
 ## Run
 
 ```bash
 npm i -g hotstuff-market-cli
-hotstuff
+hotstuff help
+hotstuff market list
 ```
 
 ## Local Dev
@@ -14,64 +15,75 @@ hotstuff
 ```bash
 npm install
 npm link
-hotstuff
+hotstuff help
 ```
 
-No `npm run cli --` required. Once linked, you can launch with:
-- `hotstuff` (starts interactive mode)
-- `go` (starts interactive mode)
-- `start` (starts interactive mode)
-- `cli` (starts interactive mode)
-
-## Project structure
+## Project Structure
 
 ```text
-cli.mjs                  # thin entrypoint
-src/constants.mjs        # server path + command/tool constants
-src/mcp-client.mjs       # MCP connect/call/close helpers
-src/command-runner.mjs   # all command implementations
-src/display.mjs          # help/menu/animation/output formatting
-src/interactive.mjs      # start mode, menu, natural text parsing
+cli.mjs        # CLI entrypoint + top-level routing
+src/sdk.mjs    # Standard client layer: HTTP/WS transport + info/exchange/explorer/subscriptions
+src/market.mjs # market command handlers + argument parsing
+src/auth.mjs   # one-time API wallet/private key setup
+src/trade.mjs  # buy/sell/cancel/order commands
+src/ui.mjs     # help/cards/structured output rendering
 ```
 
-## Interactive mode
+## Commands
 
 ```bash
-hotstuff
-# or:
-go
-# or:
-start
-# or:
-cli
+# trading
+hotstuff auth setup
+hotstuff auth setup --private-key 0x...
+hotstuff trade buy BTC 0.01 70000
+hotstuff trade sell BTC 0.01 71000
+hotstuff trade cancel BTC --oid 123456
+hotstuff trade cancel-all
+hotstuff trade orders --limit 20
+
+# market data
+hotstuff market list --type perps
+hotstuff market price BTC
+hotstuff market tickers --market perp --limit 10
+hotstuff market candles BTC --period 3600 --type mark
+hotstuff market orderbook BTC --depth 20
+hotstuff market chart BTC-PERP 60 mark 1710000000 1710086400
 ```
 
-Interactive mode is now guided step-by-step:
-- select a function from a visual list
-- fill each required input in sequence
-- view formatted output cards
-- choose whether to run another function
+## Extending RPC Methods
 
-You can also pick **Talk Naturally** and type:
-- `show price btc`
-- `recent trades eth 5`
-- `orderbook btc 10`
+`src/sdk.mjs` uses a dynamic RPC proxy. New methods are auto-available on all RPC clients:
 
-## Common commands
+```js
+const info = createInfoClient();
+const explorer = createExplorerClient();
 
-```bash
-cli tools
-cli price BTC-PERP
-cli ticker ETH-PERP
-cli mids
-cli orderbook BTC-PERP 20
-cli trades BTC-PERP 50
+await info.someNewMethod({ ...params });
+await explorer.someExplorerMethod({ ...params });
 ```
 
-## Advanced
+No method list update is required.
 
-Call any tool directly:
+## Extending Subscription Methods
 
-```bash
-cli call get_ticker '{"symbol":"ETH-PERP"}'
+`createSubscriptionClient()` uses `SUBSCRIPTION_METHODS` as a registry.
+To add a new alias/channel, append one map entry in `src/sdk.mjs`:
+
+```js
+export const SUBSCRIPTION_METHODS = {
+  ...,
+  myNewFeed: {
+    channel: "my_new_feed",
+    normalize: (params = {}) => ({ ...params }),
+  },
+};
+```
+
+Then call it directly:
+
+```js
+const subscriptions = createSubscriptionClient();
+await subscriptions.myNewFeed({ ...params }, (event) => {
+  console.log(event.detail);
+});
 ```

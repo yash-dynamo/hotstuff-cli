@@ -1,7 +1,7 @@
 {
   "name": "hotstuff-market-cli",
-  "version": "0.1.0",
-  "description": "Gamified Hotstuff market CLI over MCP.",
+  "version": "0.1.1",
+  "description": "Hotstuff market + trading CLI powered by the official TypeScript SDK.",
   "type": "module",
   "preferGlobal": true,
   "engines": {
@@ -10,9 +10,7 @@
   "bin": {
     "hotstuff-market": "cli.mjs",
     "hotstuff": "cli.mjs",
-    "go": "cli.mjs",
-    "cli": "cli.mjs",
-    "start": "cli.mjs"
+    "cli": "cli.mjs"
   },
   "files": [
     "cli.mjs",
@@ -21,24 +19,22 @@
   ],
   "scripts": {
     "cli": "node ./cli.mjs",
-    "go": "node ./cli.mjs start",
-    "start": "node ./cli.mjs start",
     "pack:check": "npm pack --dry-run"
   },
   "keywords": [
     "hotstuff",
     "cli",
-    "mcp",
     "trading",
-    "market-data"
+    "orders",
+    "market-data",
+    "sdk"
   ],
   "license": "MIT",
   "publishConfig": {
     "access": "public"
   },
   "dependencies": {
-    "@inquirer/prompts": "^7.10.1",
-    "@yash-dynamo/mcp11": "^0.1.1",
+    "@hotstuff-labs/ts-sdk": "^0.0.1-beta.10",
     "chalk": "^5.6.2"
   }
 }

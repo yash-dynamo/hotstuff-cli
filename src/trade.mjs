@@ -3,7 +3,7 @@ import process from "node:process";
 import { createInfoClient, createExchangeClient } from "./sdk.mjs";
 import { normalizeMarketSymbol } from "./market.mjs";
 import { ensureCredentials } from "./auth.mjs";
-import { printJsonBlock, printTradeHelp } from "./ui.mjs";
+import { printCard, printJsonBlock, printTradeHelp } from "./ui.mjs";
 
 // ------------- Constants -------------
 const SIDES = new Set(["buy", "sell"]);
@@ -133,7 +133,18 @@ function printDebugPayload(title, value) {
 }
 
 async function requireSavedCredentials() {
-  return ensureCredentials({ noPrompt: true });
+  try {
+    return await ensureCredentials({ noPrompt: true });
+  } catch (error) {
+    if (String(error?.message ?? "").includes("No saved credentials in credentials.json")) {
+      printCard("Auth Required", [
+        "No saved credentials in credentials.json.",
+        "Run: node ./cli.mjs auth setup.",
+      ]);
+      return null;
+    }
+    throw error;
+  }
 }
 
 function normalizeAddress(value) {
@@ -242,6 +253,9 @@ async function runPlaceOrder(sideName, args, options) {
   );
 
   const credentials = await requireSavedCredentials();
+  if (!credentials) {
+    return;
+  }
   const info = createInfoClient();
   const exchange = createExchangeClient({ privateKey: credentials.privateKey });
   const agent = await assertAuthorizedAgent(info, credentials);
@@ -300,6 +314,9 @@ async function runCancel(args, options) {
   );
 
   const credentials = await requireSavedCredentials();
+  if (!credentials) {
+    return;
+  }
   const info = createInfoClient();
   const exchange = createExchangeClient({ privateKey: credentials.privateKey });
   await assertAuthorizedAgent(info, credentials);
@@ -331,6 +348,9 @@ async function runCancelInstrument(args, options) {
   );
 
   const credentials = await requireSavedCredentials();
+  if (!credentials) {
+    return;
+  }
   const info = createInfoClient();
   const exchange = createExchangeClient({ privateKey: credentials.privateKey });
   await assertAuthorizedAgent(info, credentials);
@@ -353,6 +373,9 @@ async function runCancelAll(options) {
     Date.now() + 3600_000,
   );
   const credentials = await requireSavedCredentials();
+  if (!credentials) {
+    return;
+  }
   const info = createInfoClient();
   await assertAuthorizedAgent(info, credentials);
   const exchange = createExchangeClient({ privateKey: credentials.privateKey });
@@ -362,6 +385,9 @@ async function runCancelAll(options) {
 
 async function runOrders(options) {
   const credentials = await requireSavedCredentials();
+  if (!credentials) {
+    return;
+  }
   const info = createInfoClient();
 
   const page = options.page === undefined ? undefined : toPositiveInteger(options.page, "page");
@@ -376,6 +402,9 @@ async function runOrders(options) {
 
 async function runPositions(options) {
   const credentials = await requireSavedCredentials();
+  if (!credentials) {
+    return;
+  }
   const info = createInfoClient();
   const response = await info.positions({ user: credentials.address });
   printJsonBlock("Positions", response);

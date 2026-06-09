@@ -139,8 +139,8 @@ export function printMarketHelp() {
 export function printTradeHelp() {
   printCard("Trade Setup", [
     "Trading requires saved credentials first.",
-    "Run: hotstuff auth setup",
-    "Check: hotstuff auth status",
+    "Run: node ./cli.mjs auth setup",
+    "Check: node ./cli.mjs auth status",
   ]);
 
   printCard("Trade Commands", [
@@ -155,15 +155,15 @@ export function printTradeHelp() {
   ]);
 
   printCard("Trade Examples", [
-    "hotstuff auth setup",
-    "hotstuff auth status",
-    "hotstuff trade buy BTC 0.01 70000",
-    "hotstuff trade sell BTC 0.01 71000",
-    "hotstuff trade cancel BTC --oid 123456",
-    "hotstuff trade cancel BTC --cloid cli-12345",
-    "hotstuff trade cancel-instrument BTC",
-    "hotstuff trade cancel-all",
-    "hotstuff trade orders --limit 20",
+    "node ./cli.mjs auth setup",
+    "node ./cli.mjs auth status",
+    "node ./cli.mjs trade buy BTC 0.01 70000",
+    "node ./cli.mjs trade sell BTC 0.01 71000",
+    "node ./cli.mjs trade cancel BTC --oid 123456",
+    "node ./cli.mjs trade cancel BTC --cloid cli-12345",
+    "node ./cli.mjs trade cancel-instrument BTC",
+    "node ./cli.mjs trade cancel-all",
+    "node ./cli.mjs trade orders --limit 20",
   ]);
 }
 
@@ -177,10 +177,10 @@ export function printAuthHelp() {
   ]);
 
   printCard("Auth Examples", [
-    "hotstuff auth setup",
-    "hotstuff auth setup --private-key 0x... --address 0x...",
-    "hotstuff auth status",
-    "hotstuff auth clear",
+    "node ./cli.mjs auth setup",
+    "node ./cli.mjs auth setup --private-key 0x... --address 0x...",
+    "node ./cli.mjs auth status",
+    "node ./cli.mjs auth clear",
   ]);
 }
 

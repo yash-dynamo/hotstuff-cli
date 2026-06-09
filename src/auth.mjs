@@ -1,15 +1,12 @@
 // ------------- Imports -------------
-import path from "node:path";
 import { promises as fs } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { privateKeyToAccount } from "viem/accounts";
 import { printAuthHelp, printCard } from "./ui.mjs";
 
 // ------------- Storage Paths -------------
-const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const CREDENTIALS_FILE = path.join(PROJECT_ROOT, "credentials.json");
+const CREDENTIALS_FILE = "credentials.json";
 
 // ------------- Helpers -------------
 function parseArgs(argv = []) {
@@ -174,7 +171,7 @@ export async function ensureCredentials(options = {}) {
 
   if (options.noPrompt) {
     throw new Error(
-      "No saved credentials in ./credentials.json. Run: hotstuff auth setup",
+      "No saved credentials in credentials.json. Run: node ./cli.mjs auth setup.",
     );
   }
 
@@ -217,8 +214,8 @@ export async function runAuth(argv = []) {
     const creds = await loadCredentials();
     if (!creds) {
       printCard("Credential Status", [
-        "No saved credentials in ./credentials.json.",
-        "Run: hotstuff auth setup",
+        "No saved credentials in credentials.json.",
+        "Run: node ./cli.mjs auth setup.",
       ]);
       return;
     }

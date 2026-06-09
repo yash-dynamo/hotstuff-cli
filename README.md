@@ -25,7 +25,7 @@
 
 ## Features
 
-- Prompted credential setup stored in `./credentials.json`
+- Prompted credential setup stored in `credentials.json` in the current working directory
 - Market data commands for price discovery and monitoring
 - Trade commands for place/cancel/order tracking
 - Mainnet/testnet switching via env vars
@@ -47,70 +47,70 @@ Aliases available after install:
 
 ```bash
 # 1) Configure API credentials once
-hotstuff auth setup
+node ./cli.mjs auth setup
 
 # 2) Confirm auth is ready
-hotstuff auth status
+node ./cli.mjs auth status
 
 # 3) Inspect market
-hotstuff market price BTC
+node ./cli.mjs market price BTC
 
 # 4) Place an order
-hotstuff trade buy BTC 0.01 70000
+node ./cli.mjs trade buy BTC 0.01 70000
 
 # 5) Check account state
-hotstuff trade orders --limit 20
-hotstuff trade positions
+node ./cli.mjs trade orders --limit 20
+node ./cli.mjs trade positions
 ```
 
-If credentials are missing or the signer is not authorized, the CLI stops before placing the order and tells you which auth step to fix first.
-`auth setup` always asks for the main account address and agent private key, then overwrites `./credentials.json`.
+If credentials are missing or the signer is not authorized, the CLI stops before placing the order and shows the next auth step to run.
+`auth setup` always asks for the main account address and agent private key, then overwrites `credentials.json` in the current working directory.
 
 ## Commands
 
 ### Auth
 
 ```bash
-hotstuff auth setup
-hotstuff auth setup --private-key 0x... --address 0x...
-hotstuff auth status
-hotstuff auth clear
+node ./cli.mjs auth setup
+node ./cli.mjs auth setup --private-key 0x... --address 0x...
+node ./cli.mjs auth status
+node ./cli.mjs auth clear
 ```
 
 Recommended order:
 
-1. Run `hotstuff auth setup` and enter the main account address plus agent key when prompted
-2. Run `hotstuff auth status`
+1. Run `node ./cli.mjs auth setup` and enter the main account address plus agent key when prompted
+2. Run `node ./cli.mjs auth status`
 3. Trade only after the status output shows the expected account and signer
 
 ### Market
 
 ```bash
-hotstuff market list [--type all|perps|spot]
-hotstuff market price <SYMBOL>
-hotstuff market tickers [--market perp|spot|all] [--limit N]
-hotstuff market candles <SYMBOL> [--period SECONDS] [--from UNIX] [--to UNIX] [--type mark|ltp|index]
-hotstuff market orderbook <SYMBOL> [--depth N]
-hotstuff market instruments [perps|spot|all]
-hotstuff market ticker <SYMBOL>
-hotstuff market oracle <ASSET>
-hotstuff market supported-collateral <ASSET>
-hotstuff market bbo <SYMBOL>
-hotstuff market mids <SYMBOL>
-hotstuff market trades <SYMBOL> [LIMIT]
-hotstuff market chart <SYMBOL> <RES> <TYPE> <FROM_UNIX> <TO_UNIX>
+node ./cli.mjs market list [--type all|perps|spot]
+node ./cli.mjs market price <SYMBOL>
+node ./cli.mjs market tickers [--market perp|spot|all] [--limit N]
+node ./cli.mjs market candles <SYMBOL> [--period SECONDS] [--from UNIX] [--to UNIX] [--type mark|ltp|index]
+node ./cli.mjs market orderbook <SYMBOL> [--depth N]
+node ./cli.mjs market instruments [perps|spot|all]
+node ./cli.mjs market ticker <SYMBOL>
+node ./cli.mjs market oracle <ASSET>
+node ./cli.mjs market supported-collateral <ASSET>
+node ./cli.mjs market bbo <SYMBOL>
+node ./cli.mjs market mids <SYMBOL>
+node ./cli.mjs market trades <SYMBOL> [LIMIT]
+node ./cli.mjs market chart <SYMBOL> <RES> <TYPE> <FROM_UNIX> <TO_UNIX>
 ```
 
 ### Trade
 
 ```bash
-hotstuff trade buy <SYMBOL> <SIZE> <PRICE> [--position LONG|SHORT|BOTH] [--tif GTC|IOC|FOK] [--reduce-only] [--post-only] [--cloid ID] [--expires EPOCH_MS]
-hotstuff trade sell <SYMBOL> <SIZE> <PRICE> [--position LONG|SHORT|BOTH] [--tif GTC|IOC|FOK] [--reduce-only] [--post-only] [--cloid ID] [--expires EPOCH_MS]
-hotstuff trade cancel <SYMBOL> (--oid ORDER_ID | --cloid CLIENT_ID) [--expires EPOCH_MS]
-hotstuff trade cancel-instrument <SYMBOL> [--expires EPOCH_MS]
-hotstuff trade cancel-all [--expires EPOCH_MS]
-hotstuff trade orders [--limit N] [--page N]
-hotstuff trade positions
+node ./cli.mjs trade buy <SYMBOL> <SIZE> <PRICE> [--position LONG|SHORT|BOTH] [--tif GTC|IOC|FOK] [--reduce-only] [--post-only] [--cloid ID] [--expires EPOCH_MS]
+node ./cli.mjs trade sell <SYMBOL> <SIZE> <PRICE> [--position LONG|SHORT|BOTH] [--tif GTC|IOC|FOK] [--reduce-only] [--post-only] [--cloid ID] [--expires EPOCH_MS]
+node ./cli.mjs trade cancel <SYMBOL> (--oid ORDER_ID | --cloid CLIENT_ID) [--expires EPOCH_MS]
+node ./cli.mjs trade cancel-instrument <SYMBOL> [--expires EPOCH_MS]
+node ./cli.mjs trade cancel-all [--expires EPOCH_MS]
+node ./cli.mjs trade orders [--limit N] [--page N]
+node ./cli.mjs trade positions
 ```
 
 For troubleshooting signer mismatches, add `--debug` or set `HOTSTUFF_DEBUG=1` on trade commands.
@@ -171,9 +171,9 @@ If neither is set, mainnet is used.
 
 ## Credential Storage
 
-- File: `./credentials.json` in the project root
-- Saved and overwritten by `hotstuff auth setup`
-- Cleared with `hotstuff auth clear`
+- File: `credentials.json` in the current working directory
+- Saved and overwritten by `node ./cli.mjs auth setup`
+- Cleared with `node ./cli.mjs auth clear`
 - The account address can be the main trading account, while the private key can be an authorized agent signer.
 - `auth setup` asks for both values every time and overwrites the old file.
 - The CLI checks the signer against the account's authorized agents before sending a trade.
@@ -206,12 +206,12 @@ npm run pack:check
 cli.mjs        # CLI entrypoint + top-level routing
 src/sdk.mjs    # standard client layer: HTTP/WS + info/exchange/explorer/subscriptions
 src/market.mjs # market command handlers
-src/auth.mjs   # account + agent credential setup, status, clear, and root credentials.json handling
+src/auth.mjs   # account + agent credential setup, status, clear, and credentials.json handling in the current working directory
 src/trade.mjs  # buy/sell/cancel/order commands
 src/ui.mjs     # help/cards/structured output rendering
 ```
 
-## Extending with New SDK Methods
+## SDK Methods
 
 ### RPC methods (Info/Explorer/Exchange)
 

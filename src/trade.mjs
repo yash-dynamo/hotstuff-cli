@@ -1,4 +1,5 @@
 // ------------- Imports -------------
+import process from "node:process";
 import { createInfoClient, createExchangeClient } from "./sdk.mjs";
 import { normalizeMarketSymbol } from "./market.mjs";
 import { ensureCredentials } from "./auth.mjs";
@@ -10,10 +11,11 @@ const POSITION_SIDES = new Set(["LONG", "SHORT", "BOTH"]);
 const TIFS = new Set(["GTC", "IOC", "FOK"]);
 
 const USAGE = {
-  buy: "trade buy <SYMBOL> <SIZE> <PRICE> [--position LONG|SHORT|BOTH] [--tif GTC|IOC|FOK] [--reduce-only] [--post-only] [--cloid ID] [--expires UNIX]",
-  sell: "trade sell <SYMBOL> <SIZE> <PRICE> [--position LONG|SHORT|BOTH] [--tif GTC|IOC|FOK] [--reduce-only] [--post-only] [--cloid ID] [--expires UNIX]",
-  cancel: "trade cancel <SYMBOL> (--oid ORDER_ID | --cloid CLIENT_ID) [--expires UNIX]",
-  cancelAll: "trade cancel-all [--expires UNIX]",
+  buy: "trade buy <SYMBOL> <SIZE> <PRICE> [--position LONG|SHORT|BOTH] [--tif GTC|IOC|FOK] [--reduce-only] [--post-only] [--cloid ID] [--expires EPOCH_MS]",
+  sell: "trade sell <SYMBOL> <SIZE> <PRICE> [--position LONG|SHORT|BOTH] [--tif GTC|IOC|FOK] [--reduce-only] [--post-only] [--cloid ID] [--expires EPOCH_MS]",
+  cancel: "trade cancel <SYMBOL> (--oid ORDER_ID | --cloid CLIENT_ID) [--expires EPOCH_MS]",
+  cancelInstrument: "trade cancel-instrument <SYMBOL> [--expires EPOCH_MS]",
+  cancelAll: "trade cancel-all [--expires EPOCH_MS]",
   orders: "trade orders [--limit N] [--page N]",
   positions: "trade positions",
 };
@@ -80,15 +82,18 @@ function toPositiveInteger(input, fieldName) {
   return value;
 }
 
-function toUnixSecondsOrDefault(input, defaultValue) {
+function toExpiryMs(input, defaultValue) {
   if (input === undefined) {
     return defaultValue;
   }
   const value = Number(input);
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error("expires must be a unix timestamp in seconds.");
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error("expires must be a positive timestamp.");
   }
-  return value;
+  if (value < 1_000_000_000_000) {
+    return Math.floor(value * 1000);
+  }
+  return Math.floor(value);
 }
 
 function parseEnum(value, accepted, fieldName, fallback) {
@@ -116,8 +121,23 @@ function parseBooleanFlag(value, fallback = false) {
   return Boolean(value);
 }
 
+function isDebugEnabled(options = {}) {
+  if (options.debug !== undefined) {
+    return parseBooleanFlag(options.debug, false);
+  }
+  return parseBooleanFlag(process.env.HOTSTUFF_DEBUG, false);
+}
+
+function printDebugPayload(title, value) {
+  printJsonBlock(`Debug: ${title}`, value);
+}
+
 async function requireSavedCredentials() {
   return ensureCredentials({ noPrompt: true });
+}
+
+function normalizeAddress(value) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 // ------------- Instrument Lookup -------------
@@ -142,6 +162,69 @@ async function resolveInstrument(info, symbolInput) {
   };
 }
 
+async function assertAuthorizedAgent(info, credentials) {
+  const signerAddress = credentials.signerAddress ?? credentials.address;
+  const userAddress = credentials.address;
+
+  const agents = await info.allAgents({ user: userAddress }).catch((error) => {
+    throw new Error(
+      `Unable to verify agent authorization for ${userAddress}: ${error?.message ?? error}`,
+    );
+  });
+
+  const authorized = Array.isArray(agents)
+    ? agents.some((agent) => normalizeAddress(agent?.agent_address) === normalizeAddress(signerAddress))
+    : false;
+
+  if (!authorized) {
+    const listed = Array.isArray(agents)
+      ? agents.map((agent) => agent?.agent_address).filter(Boolean)
+      : [];
+    throw new Error(
+      [
+        `Signer ${signerAddress} is not authorized for account ${userAddress}.`,
+        listed.length ? `Authorized agents: ${listed.join(", ")}` : "No authorized agents were returned.",
+      ].join(" "),
+    );
+  }
+
+  return { signerAddress, userAddress };
+}
+
+function buildOrderPayload({
+  instrumentId,
+  side,
+  positionSide,
+  price,
+  size,
+  tif,
+  ro,
+  po,
+  cloid,
+  expiresAfter,
+}) {
+  return {
+    orders: [
+      {
+        instrumentId,
+        side,
+        positionSide,
+        price,
+        size,
+        tif,
+        ro,
+        po,
+        cloid,
+        triggerPx: "",
+        isMarket: false,
+        tpsl: "",
+        grouping: "normal",
+      },
+    ],
+    expiresAfter,
+  };
+}
+
 // ------------- Command Handlers -------------
 async function runPlaceOrder(sideName, args, options) {
   const symbolArg = args[0];
@@ -153,35 +236,45 @@ async function runPlaceOrder(sideName, args, options) {
   const price = String(toPositiveNumber(requireValue(priceArg, USAGE[sideName]), "price"));
   const positionSide = parseEnum(options.position, POSITION_SIDES, "position", "BOTH");
   const tif = parseEnum(options.tif, TIFS, "tif", "GTC");
-  const expiresAfter = toUnixSecondsOrDefault(
+  const expiresAfter = toExpiryMs(
     options.expires,
-    Math.floor(Date.now() / 1000) + 3600,
+    Date.now() + 3600_000,
   );
 
   const credentials = await requireSavedCredentials();
   const info = createInfoClient();
   const exchange = createExchangeClient({ privateKey: credentials.privateKey });
+  const agent = await assertAuthorizedAgent(info, credentials);
   const instrument = await resolveInstrument(info, symbolArg);
 
   const cloid = String(options.cloid ?? `cli-${Date.now()}`);
   const ro = parseBooleanFlag(options["reduce-only"] ?? options.ro, false);
   const po = parseBooleanFlag(options["post-only"] ?? options.po, false);
-  const response = await exchange.placeOrder({
-    orders: [
-      {
-        instrumentId: instrument.id,
-        side,
-        positionSide,
-        price,
-        size,
-        tif,
-        ro,
-        po,
-        cloid,
-      },
-    ],
+  const debug = isDebugEnabled(options);
+  const payload = buildOrderPayload({
+    instrumentId: instrument.id,
+    side,
+    positionSide,
+    price,
+    size,
+    tif,
+    ro,
+    po,
+    cloid,
     expiresAfter,
   });
+
+  if (debug) {
+    printDebugPayload("context", {
+      accountAddress: credentials.address,
+      signerAddress: credentials.signerAddress ?? credentials.address,
+      authorizedAgent: agent,
+      network: exchange.transport?.isTestnet ? "testnet" : "mainnet",
+    });
+    printDebugPayload("payload", payload);
+  }
+
+  const response = await exchange.placeOrder(payload);
 
   printJsonBlock(`${sideName.toUpperCase()} Order`, {
     symbol: instrument.symbol,
@@ -201,14 +294,15 @@ async function runCancel(args, options) {
     throw new Error(`Usage: ${USAGE.cancel}`);
   }
 
-  const expiresAfter = toUnixSecondsOrDefault(
+  const expiresAfter = toExpiryMs(
     options.expires,
-    Math.floor(Date.now() / 1000) + 3600,
+    Date.now() + 3600_000,
   );
 
   const credentials = await requireSavedCredentials();
   const info = createInfoClient();
   const exchange = createExchangeClient({ privateKey: credentials.privateKey });
+  await assertAuthorizedAgent(info, credentials);
   const instrument = await resolveInstrument(info, symbol);
 
   if (oidRaw) {
@@ -229,12 +323,38 @@ async function runCancel(args, options) {
   printJsonBlock("Cancel By CLOID", { symbol: instrument.symbol, cloid, response });
 }
 
-async function runCancelAll(options) {
-  const expiresAfter = toUnixSecondsOrDefault(
+async function runCancelInstrument(args, options) {
+  const symbol = requireValue(args[0], USAGE.cancelInstrument, normalizeMarketSymbol);
+  const expiresAfter = toExpiryMs(
     options.expires,
-    Math.floor(Date.now() / 1000) + 3600,
+    Date.now() + 3600_000,
+  );
+
+  const credentials = await requireSavedCredentials();
+  const info = createInfoClient();
+  const exchange = createExchangeClient({ privateKey: credentials.privateKey });
+  await assertAuthorizedAgent(info, credentials);
+  const instrument = await resolveInstrument(info, symbol);
+  const response = await exchange.cancelByInstrument({
+    instrumentId: instrument.id,
+    expiresAfter,
+  });
+
+  printJsonBlock("Cancel By Instrument", {
+    symbol: instrument.symbol,
+    instrumentId: instrument.id,
+    response,
+  });
+}
+
+async function runCancelAll(options) {
+  const expiresAfter = toExpiryMs(
+    options.expires,
+    Date.now() + 3600_000,
   );
   const credentials = await requireSavedCredentials();
+  const info = createInfoClient();
+  await assertAuthorizedAgent(info, credentials);
   const exchange = createExchangeClient({ privateKey: credentials.privateKey });
   const response = await exchange.cancelAll({ expiresAfter });
   printJsonBlock("Cancel All", response);
@@ -279,6 +399,11 @@ export async function runTrade(argv = []) {
 
   if (command === "cancel") {
     await runCancel(args, options);
+    return;
+  }
+
+  if (command === "cancel-instrument") {
+    await runCancelInstrument(args, options);
     return;
   }
 

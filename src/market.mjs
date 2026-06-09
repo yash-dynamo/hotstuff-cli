@@ -5,11 +5,12 @@ import { printJsonBlock, printMarketHelp, printPriceSummary } from "./ui.mjs";
 const LIST_TYPES = new Set(["all", "perps", "spot"]);
 const TICKER_MARKETS = new Set(["all", "perp", "spot"]);
 const CHART_TYPES = new Set(["mark", "ltp", "index"]);
-const CHART_RESOLUTIONS = new Set(["1", "5", "15", "60", "240", "1D", "1W"]);
+const CHART_RESOLUTIONS = new Set(["1", "5", "15", "30", "60", "240", "1D", "1W"]);
 const PERIOD_TO_RESOLUTION = new Map([
   [60, "1"],
   [300, "5"],
   [900, "15"],
+  [1800, "30"],
   [3600, "60"],
   [14400, "240"],
   [86400, "1D"],
@@ -26,8 +27,9 @@ const USAGE = {
   instruments: "market instruments [perps|spot|all]",
   ticker: "market ticker <SYMBOL>",
   oracle: "market oracle <ASSET>",
+  supportedCollateral: "market supported-collateral <ASSET>",
   bbo: "market bbo <SYMBOL>",
-  mids: "market mids [SYMBOL|LIMIT|all]",
+  mids: "market mids <SYMBOL>",
   trades: "market trades <SYMBOL> [LIMIT]",
   chart: "market chart <SYMBOL> <RES> <TYPE> <FROM_UNIX> <TO_UNIX>",
 };
@@ -139,6 +141,30 @@ function getAssetFromSymbol(symbol) {
   return normalizeSymbol(symbol).split(/[-_/]/)[0];
 }
 
+async function resolveInstrumentId(info, symbolInput, usage = USAGE.chart) {
+  const symbol = requireValue(symbolInput, usage, normalizeMarketSymbol);
+  const instruments = await info.instruments({ type: "all" });
+  const allInstruments = [
+    ...(Array.isArray(instruments?.perps) ? instruments.perps : []),
+    ...(Array.isArray(instruments?.spot) ? instruments.spot : []),
+  ];
+
+  const target = normalizeSymbol(symbol);
+  const match = allInstruments.find((item) => {
+    const raw = normalizeSymbol(item?.name ?? item?.symbol ?? "");
+    return raw === target || normalizeMarketSymbol(raw) === target;
+  });
+
+  if (!match) {
+    throw new Error(`Instrument "${symbol}" not found.`);
+  }
+
+  return {
+    id: Number(match.id),
+    symbol: String(match.name ?? match.symbol ?? symbol),
+  };
+}
+
 function periodToResolution(periodSeconds) {
   const resolution = PERIOD_TO_RESOLUTION.get(periodSeconds);
   if (!resolution) {
@@ -214,6 +240,12 @@ async function runPrice(info, args) {
   printJsonBlock("Oracle", oracle);
 }
 
+async function runSupportedCollateral(info, args) {
+  const asset = requireValue(args[0], USAGE.supportedCollateral, normalizeSymbol);
+  const rows = await info.supportedCollateral({ symbol: asset });
+  printJsonBlock("Supported Collateral", rows);
+}
+
 async function runTickers(info, _args, options) {
   const market = parseEnum(options.market, TICKER_MARKETS, USAGE.tickers, "all");
   const limit = toPositiveInteger(options.limit, "limit");
@@ -242,14 +274,23 @@ async function runCandles(info, args, options) {
     throw new Error("from must be less than to.");
   }
 
+  const instrument = await resolveInstrumentId(info, symbol, USAGE.candles);
   const rows = await info.chart({
-    symbol,
+    instrument_id: instrument.id,
     resolution: periodToResolution(period),
     chart_type: parseChartType(options.type, "mark"),
     from,
     to,
   });
-  printJsonBlock("Candles", rows);
+  printJsonBlock("Candles", {
+    symbol: instrument.symbol,
+    instrument_id: instrument.id,
+    resolution: periodToResolution(period),
+    chart_type: parseChartType(options.type, "mark"),
+    from,
+    to,
+    rows,
+  });
 }
 
 async function runInstruments(info, args) {
@@ -259,22 +300,8 @@ async function runInstruments(info, args) {
 }
 
 async function runMids(info, args) {
-  const firstArg = String(args[0] ?? "").trim();
-  const lowerArg = firstArg.toLowerCase();
-
-  if (firstArg && !/^\d+$/.test(firstArg) && lowerArg !== "all") {
-    const symbol = normalizeMarketSymbol(firstArg);
-    const tickerRows = await info.ticker({ symbol });
-    const ticker = unwrapFirstRow(tickerRows);
-    printJsonBlock("Mid Prices", [{ symbol, mid_price: ticker?.mid_price ?? "n/a" }]);
-    return;
-  }
-
-  const rows = await info.mids({});
-  if (firstArg && /^\d+$/.test(firstArg)) {
-    printJsonBlock("Mid Prices", rows.slice(0, toPositiveInteger(firstArg, "limit")));
-    return;
-  }
+  const symbol = requireValue(args[0], USAGE.mids, normalizeMarketSymbol);
+  const rows = await info.mids({ symbol });
   printJsonBlock("Mid Prices", rows);
 }
 
@@ -296,14 +323,23 @@ async function runChart(info, args) {
     throw new Error("FROM_UNIX must be less than TO_UNIX.");
   }
 
+  const instrument = await resolveInstrumentId(info, symbol, USAGE.chart);
   const rows = await info.chart({
-    symbol,
+    instrument_id: instrument.id,
     resolution,
     chart_type: chartType,
     from,
     to,
   });
-  printJsonBlock("Chart", rows);
+  printJsonBlock("Chart", {
+    symbol: instrument.symbol,
+    instrument_id: instrument.id,
+    resolution,
+    chart_type: chartType,
+    from,
+    to,
+    rows,
+  });
 }
 
 // ------------- Command Registry -------------
@@ -331,6 +367,7 @@ const MARKET_COMMANDS = {
     params: (symbol) => ({ symbol }),
     unwrap: false,
   }),
+  "supported-collateral": runSupportedCollateral,
   bbo: createMethodCommand({
     usage: USAGE.bbo,
     method: "bbo",

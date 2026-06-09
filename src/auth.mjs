@@ -1,15 +1,15 @@
 // ------------- Imports -------------
-import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { privateKeyToAccount } from "viem/accounts";
 import { printAuthHelp, printCard } from "./ui.mjs";
 
 // ------------- Storage Paths -------------
-const CONFIG_DIR = path.join(os.homedir(), ".hotstuff-cli");
-const CREDENTIALS_FILE = path.join(CONFIG_DIR, "credentials.json");
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const CREDENTIALS_FILE = path.join(PROJECT_ROOT, "credentials.json");
 
 // ------------- Helpers -------------
 function parseArgs(argv = []) {
@@ -80,8 +80,13 @@ function maskSecret(secret, keep = 4) {
   return `${raw.slice(0, keep)}...${raw.slice(-keep)}`;
 }
 
-async function ensureConfigDir() {
-  await fs.mkdir(CONFIG_DIR, { recursive: true, mode: 0o700 });
+function formatSavedCredentialLines({ address, privateKey }) {
+  return [
+    `Account Address: ${address}`,
+    `Signer Address: ${privateKeyToAccount(privateKey).address}`,
+    `Private Key: ${maskSecret(privateKey)}`,
+    `File: ${CREDENTIALS_FILE}`,
+  ];
 }
 
 // ------------- Public Credential API -------------
@@ -99,7 +104,12 @@ export async function loadCredentials() {
       return null;
     }
 
-    return { address, privateKey };
+    return {
+      address,
+      signerAddress: privateKey ? privateKeyToAccount(privateKey).address : undefined,
+      privateKey,
+      source: "file",
+    };
   } catch {
     return null;
   }
@@ -110,25 +120,18 @@ export async function saveCredentials({ address, privateKey }) {
   const providedAddress = normalizeAddress(address);
 
   validatePrivateKey(normalizedPrivateKey);
-  const derivedAddress = privateKeyToAccount(normalizedPrivateKey).address;
 
-  if (providedAddress) {
-    validateAddress(providedAddress);
-    if (providedAddress.toLowerCase() !== derivedAddress.toLowerCase()) {
-      throw new Error(
-        `Address does not match private key. Derived address is ${derivedAddress}.`,
-      );
-    }
+  if (!providedAddress) {
+    throw new Error("Account address is required. Use --address or enter it when prompted.");
   }
 
-  const normalizedAddress = providedAddress || derivedAddress;
+  validateAddress(providedAddress);
 
-  await ensureConfigDir();
   await fs.writeFile(
     CREDENTIALS_FILE,
     JSON.stringify(
       {
-        address: normalizedAddress,
+        address: providedAddress,
         privateKey: normalizedPrivateKey,
         savedAt: new Date().toISOString(),
       },
@@ -138,7 +141,7 @@ export async function saveCredentials({ address, privateKey }) {
     { mode: 0o600 },
   );
 
-  return { address: normalizedAddress, privateKey: normalizedPrivateKey };
+  return { address: providedAddress, privateKey: normalizedPrivateKey };
 }
 
 export async function clearCredentials() {
@@ -150,6 +153,19 @@ export async function clearCredentials() {
   }
 }
 
+async function promptAndSaveCredentials() {
+  const rl = createInterface({ input: stdin, output: stdout });
+  try {
+    const address = normalizeAddress(await rl.question("Main account address: "));
+    const privateKey = await rl.question("Agent private key: ");
+    const saved = await saveCredentials({ address, privateKey });
+    printCard("Credentials Saved", formatSavedCredentialLines(saved));
+    return saved;
+  } finally {
+    rl.close();
+  }
+}
+
 export async function ensureCredentials(options = {}) {
   const existing = await loadCredentials();
   if (existing) {
@@ -157,22 +173,12 @@ export async function ensureCredentials(options = {}) {
   }
 
   if (options.noPrompt) {
-    throw new Error("No saved credentials. Run: hotstuff auth setup");
+    throw new Error(
+      "No saved credentials in ./credentials.json. Run: hotstuff auth setup",
+    );
   }
 
-  const rl = createInterface({ input: stdin, output: stdout });
-  try {
-    const privateKey = await rl.question("API private key: ");
-    const saved = await saveCredentials({ privateKey });
-    printCard("Credentials Saved", [
-      `Address: ${saved.address}`,
-      `Private Key: ${maskSecret(saved.privateKey)}`,
-      `File: ${CREDENTIALS_FILE}`,
-    ]);
-    return saved;
-  } finally {
-    rl.close();
-  }
+  return promptAndSaveCredentials();
 }
 
 // ------------- Auth Commands -------------
@@ -194,28 +200,33 @@ export async function runAuth(argv = []) {
     }
 
     if (privateKey) {
+      if (!address) {
+        throw new Error("When using --private-key, you must also provide --address.");
+      }
+
       const saved = await saveCredentials({ address, privateKey });
-      printCard("Credentials Saved", [
-        `Address: ${saved.address}`,
-        `Private Key: ${maskSecret(saved.privateKey)}`,
-        `File: ${CREDENTIALS_FILE}`,
-      ]);
+      printCard("Credentials Saved", formatSavedCredentialLines(saved));
       return;
     }
 
-    await ensureCredentials({ noPrompt: false });
+    await promptAndSaveCredentials();
     return;
   }
 
   if (sub === "status" || sub === "show") {
     const creds = await loadCredentials();
     if (!creds) {
-      printCard("Credential Status", ["No saved credentials.", "Run: hotstuff auth setup"]);
+      printCard("Credential Status", [
+        "No saved credentials in ./credentials.json.",
+        "Run: hotstuff auth setup",
+      ]);
       return;
     }
 
     printCard("Credential Status", [
-      `Address: ${creds.address}`,
+      `Account Address: ${creds.address}`,
+      `Signer Address: ${creds.signerAddress ?? privateKeyToAccount(creds.privateKey).address}`,
+      `Source: ${creds.source ?? "file"}`,
       `Private Key: ${maskSecret(creds.privateKey)}`,
       `File: ${CREDENTIALS_FILE}`,
     ]);

@@ -118,8 +118,9 @@ export function printMarketHelp() {
     "market instruments [perps|spot|all]",
     "market ticker <SYMBOL>",
     "market oracle <ASSET>",
+    "market supported-collateral <ASSET>",
     "market bbo <SYMBOL>",
-    "market mids [SYMBOL|LIMIT|all]",
+    "market mids <SYMBOL>",
     "market trades <SYMBOL> [LIMIT]",
     "market chart <SYMBOL> <RES> <TYPE> <FROM_UNIX> <TO_UNIX>",
     "market help",
@@ -136,10 +137,17 @@ export function printMarketHelp() {
 }
 
 export function printTradeHelp() {
+  printCard("Trade Setup", [
+    "Trading requires saved credentials first.",
+    "Run: hotstuff auth setup",
+    "Check: hotstuff auth status",
+  ]);
+
   printCard("Trade Commands", [
     "trade buy <SYMBOL> <SIZE> <PRICE> [...order opts]",
     "trade sell <SYMBOL> <SIZE> <PRICE> [...order opts]",
     "trade cancel <SYMBOL> (--oid ORDER_ID | --cloid CLIENT_ID)",
+    "trade cancel-instrument <SYMBOL>",
     "trade cancel-all",
     "trade orders [--limit N] [--page N]",
     "trade positions",
@@ -148,10 +156,12 @@ export function printTradeHelp() {
 
   printCard("Trade Examples", [
     "hotstuff auth setup",
+    "hotstuff auth status",
     "hotstuff trade buy BTC 0.01 70000",
     "hotstuff trade sell BTC 0.01 71000",
     "hotstuff trade cancel BTC --oid 123456",
     "hotstuff trade cancel BTC --cloid cli-12345",
+    "hotstuff trade cancel-instrument BTC",
     "hotstuff trade cancel-all",
     "hotstuff trade orders --limit 20",
   ]);
@@ -159,8 +169,8 @@ export function printTradeHelp() {
 
 export function printAuthHelp() {
   printCard("Auth Commands", [
-    "auth setup                        Prompt and save API private key",
-    "auth setup --private-key 0x... [--address 0x...]",
+    "auth setup                        Prompt for account address + agent key and overwrite the file",
+    "auth setup --private-key 0x... --address 0x...",
     "auth status                       Show saved credential status",
     "auth clear                        Remove saved credentials",
     "auth help",
@@ -168,7 +178,6 @@ export function printAuthHelp() {
 
   printCard("Auth Examples", [
     "hotstuff auth setup",
-    "hotstuff auth setup --private-key 0x...",
     "hotstuff auth setup --private-key 0x... --address 0x...",
     "hotstuff auth status",
     "hotstuff auth clear",

@@ -25,7 +25,7 @@
 
 ## Features
 
-- One-time API key setup (`hotstuff auth setup`)
+- Prompted credential setup stored in `./credentials.json`
 - Market data commands for price discovery and monitoring
 - Trade commands for place/cancel/order tracking
 - Mainnet/testnet switching via env vars
@@ -64,6 +64,7 @@ hotstuff trade positions
 ```
 
 If credentials are missing or the signer is not authorized, the CLI stops before placing the order and tells you which auth step to fix first.
+`auth setup` always asks for the main account address and agent private key, then overwrites `./credentials.json`.
 
 ## Commands
 
@@ -78,7 +79,7 @@ hotstuff auth clear
 
 Recommended order:
 
-1. Run `hotstuff auth setup` and enter the main account address when prompted
+1. Run `hotstuff auth setup` and enter the main account address plus agent key when prompted
 2. Run `hotstuff auth status`
 3. Trade only after the status output shows the expected account and signer
 
@@ -177,6 +178,7 @@ If neither is set, mainnet is used.
 - `auth setup` asks for both values every time and overwrites the old file.
 - The CLI checks the signer against the account's authorized agents before sending a trade.
 - If the signer is missing or unauthorized, the command exits with a clear auth message instead of sending the order.
+- `auth status` prints both the account address and signer address so you can confirm they match the intended account context.
 
 Security reminder:
 
@@ -204,7 +206,7 @@ npm run pack:check
 cli.mjs        # CLI entrypoint + top-level routing
 src/sdk.mjs    # standard client layer: HTTP/WS + info/exchange/explorer/subscriptions
 src/market.mjs # market command handlers
-src/auth.mjs   # one-time API wallet/private key setup + root credentials.json handling
+src/auth.mjs   # account + agent credential setup, status, clear, and root credentials.json handling
 src/trade.mjs  # buy/sell/cancel/order commands
 src/ui.mjs     # help/cards/structured output rendering
 ```
